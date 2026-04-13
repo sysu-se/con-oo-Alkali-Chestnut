@@ -1,29 +1,38 @@
 <script>
-	import { userGrid } from '@sudoku/stores/grid';
+	export let fixedGrid;
 	import { cursor } from '@sudoku/stores/cursor';
 	import { notes } from '@sudoku/stores/notes';
 	import { candidates } from '@sudoku/stores/candidates';
+	import { gamePaused } from '@sudoku/stores/game';
 
-	// TODO: Improve keyboardDisabled
-	import { keyboardDisabled } from '@sudoku/stores/keyboard';
+	// 来自 App 的注入
+	export let onGuess;
+	// 临时调试
+	// $: console.log('fixedGrid?', $fixedGrid?.length, $fixedGrid?.[0]?.length);
+	// $: console.log('cell', $cursor.y, $cursor.x, 'fixed=', $fixedGrid?.[$cursor.y]?.[$cursor.x]);
 
 	function handleKeyButton(num) {
-		if (!$keyboardDisabled) {
-			if ($notes) {
-				if (num === 0) {
-					candidates.clear($cursor);
-				} else {
-					candidates.add($cursor, num);
-				}
-				userGrid.set($cursor, 0);
-			} else {
-				if ($candidates.hasOwnProperty($cursor.x + ',' + $cursor.y)) {
-					candidates.clear($cursor);
-				}
+		if ($gamePaused) return;
+		if ($fixedGrid && $fixedGrid[$cursor.y]?.[$cursor.x] !== 0) return;
 
-				userGrid.set($cursor, num);
+		// 记笔记模式：只更新 candidates（旧逻辑保留）
+		if ($notes) {
+			if (num === 0) {
+				candidates.clear($cursor);
+			} else {
+				candidates.add($cursor, num);
 			}
+			// 不再写 userGrid
+			return;
 		}
+
+		// 非笔记模式：真正调用领域对象
+		if ($candidates.hasOwnProperty($cursor.x + ',' + $cursor.y)) {
+			candidates.clear($cursor);
+		}
+
+		// 注意：cursor 是 0-based，领域对象也是 0-based
+		onGuess?.($cursor.y, $cursor.x, num);
 	}
 
 	function handleKey(e) {
@@ -74,19 +83,19 @@
 	}
 </script>
 
-<svelte:window on:keydown={handleKey} /><!--on:beforeunload|preventDefault={e => e.returnValue = ''} />-->
+<svelte:window on:keydown={handleKey} />
 
 <div class="keyboard-grid">
 
 	{#each Array(10) as _, keyNum}
 		{#if keyNum === 9}
-			<button class="btn btn-key" disabled={$keyboardDisabled} title="Erase Field" on:click={() => handleKeyButton(0)}>
+			<button class="btn btn-key" disabled={$gamePaused} title="Erase Field" on:click={() => handleKeyButton(0)}>
 				<svg class="icon-outline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
 				</svg>
 			</button>
 		{:else}
-			<button class="btn btn-key" disabled={$keyboardDisabled} title="Insert {keyNum + 1}" on:click={() => handleKeyButton(keyNum + 1)}>
+			<button class="btn btn-key" disabled={$gamePaused} title="Insert {keyNum + 1}" on:click={() => handleKeyButton(keyNum + 1)}>
 				{keyNum + 1}
 			</button>
 		{/if}
@@ -98,7 +107,6 @@
 	.keyboard-grid {
 		@apply grid grid-rows-2 grid-cols-5 gap-3;
 	}
-
 
 	.btn-key {
 		@apply py-4 px-0;
